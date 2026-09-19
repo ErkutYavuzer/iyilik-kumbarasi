@@ -17,7 +17,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: app
-          image: ghcr.io/ayavuzer/dilek-kumbarasi:demo-v0.1.12
+          image: ghcr.io/ayavuzer/dilek-kumbarasi:demo-v0.1.14
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -46,6 +46,18 @@ spec:
                   name: dilek-kumbarasi-ai
                   key: GEMINI_API_KEY_2
                   optional: true
+          # Pod sonlandirilirken ingress endpoint listesini guncellemesi birkac
+          # saniye suruyor; o aralikta kapanmakta olan pod'a gelen istekler 502
+          # alabiliyor. preStop bu sure boyunca sunucuyu ayakta tutar: kubelet
+          # pod'u Endpoints'ten cikarirken container servis etmeye devam eder.
+          #
+          # Not: server.js SIGTERM'i bilerek yok sayiyor ("staying alive"), bu
+          # yuzden pod zaten grace period sonunda SIGKILL ile kapaniyor. preStop
+          # bu sureyi uzatmiyor, icine giriyor.
+          lifecycle:
+            preStop:
+              exec:
+                command: ['/bin/sh', '-c', 'sleep 10']
           volumeMounts:
             - mountPath: /app/uploads
               name: dilek-storage
