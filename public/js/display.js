@@ -34,11 +34,19 @@ class WishDisplay {
 
     async init() {
         try {
+            // Bu uc uc birbirinden bagimsiz, ama eskiden arka arkaya bekleniyordu:
+            // perde ancak ucuncusu bitince kalkiyordu (olculen zincir ~735 ms).
+            // Istekleri birlikte baslatiyoruz. UYGULAMA SIRASI DEGISMIYOR, cunku
+            // applyTheme isMessageWallMode uzerinden displayMode'u okur; mod
+            // yuklenmeden tema uygulanirsa mesaj duvari basligi yanlis kalir.
+            const themeRequest = this.fetchJson('/api/theme');
+            const settingsRequest = this.fetchJson('/api/display-settings');
+
             await this.loadDisplayMode();
-            await this.loadTheme();
+            this.applyThemePayload(await themeRequest);
             this.applyDisplayMode();
             this.initDisplayQr();
-            await this.loadDisplaySettings();
+            this.applyDisplaySettingsPayload(await settingsRequest);
             if (typeof window.finishDisplayBoot === 'function') {
                 requestAnimationFrame(() => window.finishDisplayBoot());
             }
@@ -2419,12 +2427,25 @@ class WishDisplay {
     }
 
     // === THEME ===
-    async loadTheme() {
+    // Istegi baslatmakla sonucu uygulamayi ayirir; boylece uclu istek paralel
+    // baslatilip eski sirayla uygulanabiliyor. Hata yutma davranisi korunuyor:
+    // istek basarisiz olursa null doner ve ilgili adim atlanir.
+    async fetchJson(path) {
         try {
-            const res = await fetch(`${this.basePath}/api/theme`);
-            const data = await res.json();
-            this.applyTheme(data.theme);
-        } catch (e) { }
+            const res = await fetch(`${this.basePath}${path}`);
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    }
+
+    applyThemePayload(data) {
+        if (!data) return;
+        this.applyTheme(data.theme);
+    }
+
+    async loadTheme() {
+        this.applyThemePayload(await this.fetchJson('/api/theme'));
     }
 
     applyTheme(theme) {
@@ -2439,20 +2460,19 @@ class WishDisplay {
     }
 
     async loadDisplayMode() {
-        try {
-            const res = await fetch(`${this.basePath}/api/display-mode`);
-            const data = await res.json();
-            this.displayMode = data.displayMode || 'balloon';
-        } catch (e) { }
+        const data = await this.fetchJson('/api/display-mode');
+        if (!data) return;
+        this.displayMode = data.displayMode || 'balloon';
+    }
+
+    applyDisplaySettingsPayload(data) {
+        if (!data) return;
+        this.displaySettings = { ...this.displaySettings, ...data };
+        this.applyDisplaySettings();
     }
 
     async loadDisplaySettings() {
-        try {
-            const res = await fetch(`${this.basePath}/api/display-settings`);
-            const data = await res.json();
-            this.displaySettings = { ...this.displaySettings, ...data };
-            this.applyDisplaySettings();
-        } catch (e) { }
+        this.applyDisplaySettingsPayload(await this.fetchJson('/api/display-settings'));
     }
 }
 
